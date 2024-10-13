@@ -5,10 +5,10 @@ Features:
     2: User can extract audio from the uploaded video
     3: User can resize the video by providing width and height respectively
 # Start
--> Download node modules
+-> Download node modules.
 npm install
--> run in simple mode 
+-> run in simple mode .
 npm run start
--> Run in cluster mode (To use all available cores for better performance and more request handling .)
+-> Run in cluster mode (To use all available cores for better performance and more request handling .).
 npm run cluster
     
