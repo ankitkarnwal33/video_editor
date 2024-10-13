@@ -1,0 +1,15 @@
+{
+  "name": "video-editor",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "start": "nodemon src/index.js --ignore ./public",
+    "cluster": "nodemon src/cluster.js --ignore ./public"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cpeak": "^1.4.0"
+  }
+}
