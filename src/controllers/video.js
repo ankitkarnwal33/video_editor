@@ -6,13 +6,28 @@ const db = require("../DB");
 const { deleteDirectory } = require("../../lib/utils");
 const { generateThumbnail, getDimensions } = require("../../lib/ffmpeg");
 const ffmpegHelper = require("../../lib/ffmpeg");
+const cluster = require("node:cluster");
+const videoQueue = require("../../lib/videoQueue");
+
+let jobs;
+
+if (cluster.isPrimary) {
+  jobs = new videoQueue();
+}
+
 // Function to upload the video and generate the thumbnail.
 const uploadVideo = async (req, res, handleErr) => {
   const specifiedFileName = req.headers.filename;
   const name = path.parse(specifiedFileName).name;
-  const extension = path.extname(specifiedFileName).substring(1);
+  const extension = path.extname(specifiedFileName).substring(1).toLowerCase();
   //   console.log(specifiedFileName, name, extension);
-
+  const supportedFormats = ["mp4", "mov"];
+  if (supportedFormats.indexOf(extension) === -1) {
+    return handleErr({
+      status: 400,
+      message: "Upload only .mp4 or .mov files.",
+    });
+  }
   // Create new unique directory for each received video
   const videoId = randomBytes(4).toString("hex");
 
@@ -97,9 +112,14 @@ const getVideoAssest = async (req, res, handleErr) => {
       case "resize":
         mimeType = `video/mp4`;
         res.setHeader("Content-Type", mimeType);
-
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename=${video.name}.${video.extension}`
+        );
         file = await fs.open(
-          `./storage/${video.videoId}/${video.width}x${video.height}.${video.extension}`,
+          `./storage/${video.videoId}/${req.params.get("dimensions")}.${
+            video.extension
+          }`,
           "r"
         );
 
@@ -157,6 +177,53 @@ const extractAudio = async (req, res, handleErr) => {
   } catch (error) {
     res.json({ message: "Something bad happened" });
   }
+};
+
+const resizeVideo = (req, res, handleErr) => {
+  const { videoId, width, height } = req.body;
+  db.update();
+  const video = db.videos.find((vid) => vid.videoId === videoId);
+
+  // // Resize the video
+  // const videoPath = `./storage/${video.videoId}/original.${video.extension}`;
+  // const resizedVideoPath = `./storage/${video.videoId}/${width}x${height}.${video.extension}`;
+
+  video.resizes[`${width}x${height}`] = { processing: true };
+  db.save();
+  // Enqueue the resize process.
+  if (cluster.isPrimary) {
+    // There are no parent process on top of node process
+    jobs.enqueue({
+      type: "resize",
+      videoId,
+      width,
+      height,
+    });
+  } else {
+    // It is the child process so run it in cluster mode.
+    process.send({
+      type: "new-resize",
+      data: {
+        videoId,
+        width,
+        height,
+      },
+    });
+  }
+  return res.status(201).json({ message: "Resize successfull" });
+
+  // video.resizes[`${width}x${height}`] = { processing: true };
+  // const result = await ffmpegHelper.resizeTheVideo(
+  //   videoPath,
+  //   resizedVideoPath,
+  //   width,
+  //   height
+  // );
+  // db.save();
+  // if (result === 0) {
+  //   // Resize successful.
+  //   return res.status(201).json({ message: "Resize successfull" });
+  // }
 };
 
 const controller = {
